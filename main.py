@@ -12,47 +12,47 @@ import decky_plugin
 class Plugin:
   async def _main(plugin):
     variant = os.environ.get('PLUGIN_VARIANT')
-    plugin.teamspeak = TeamSpeak.choose_variant(variant)
+    plugin.discord = Discord.choose_variant(variant)
 
   async def install(plugin):
-    decky_plugin.logger.debug('Attempting to install TeamSpeak 3')
-    plugin.teamspeak.install()
+    decky_plugin.logger.debug('Attempting to install Discord')
+    plugin.discord.install()
 
   async def start(plugin):
-    decky_plugin.logger.debug('Attempting to install TeamSpeak 3 client plugin')
-    plugin.teamspeak.install_plugin()
+    decky_plugin.logger.debug('Attempting to install Discord client plugin')
+    plugin.discord.install_plugin()
 
-    decky_plugin.logger.debug('Attempting to start TeamSpeak 3')
-    plugin.teamspeak.start()
+    decky_plugin.logger.debug('Attempting to start Discord')
+    plugin.discord.start()
 
   async def status(plugin):
-    installed = plugin.teamspeak.is_installed()
-    running = plugin.teamspeak.is_running()
+    installed = plugin.discord.is_installed()
+    running = plugin.discord.is_running()
 
-    decky_plugin.logger.debug(f'Querying TeamSpeak 3 status: installed={installed}, running={running}')
+    decky_plugin.logger.debug(f'Querying Discord status: installed={installed}, running={running}')
 
     return dict(running = running, installed = installed)
 
   async def stop(plugin):
-    decky_plugin.logger.debug('Attempting to stop TeamSpeak 3')
-    plugin.teamspeak.stop()
+    decky_plugin.logger.debug('Attempting to stop Discord')
+    plugin.discord.stop()
 
   async def _unload(plugin):
-    decky_plugin.logger.debug('Unloading plugin, attempt to stop TeamSpeak 3')
-    plugin.teamspeak.stop()
+    decky_plugin.logger.debug('Unloading plugin, attempt to stop Discord')
+    plugin.discord.stop()
 
-class TeamSpeak:
+class Discord:
   @staticmethod
   def choose_variant(variant):
     variants = dict({
-      'develop': TeamSpeak,
-      'flatpak': FlatpakTeamSpeak,
-      'native': NativeTeamSpeak,
+      'develop': Discord,
+      'flatpak': FlatpakDiscord,
+      'native': NativeDiscord,
     })
 
-    teamspeak = variants.get(variant, FlatpakTeamSpeak)
+    discord = variants.get(variant, FlatpakDiscord)
 
-    return teamspeak()
+    return discord()
 
   def configdir():
     pass
@@ -76,8 +76,8 @@ class TeamSpeak:
     if not self.is_installed() or self.is_running():
       return False
 
-    source = decky_plugin.DECKY_PLUGIN_DIR + '/bin/ts3-qs4sd.so'
-    target = self.configdir() + '/plugins/ts3-qs4sd.so'
+    source = decky_plugin.DECKY_PLUGIN_DIR + '/bin/discord-qs4sd.so'
+    target = self.configdir() + '/plugins/discord-qs4sd.so'
 
     if os.path.exists(target):
       os.chmod(target, 0o755)
@@ -89,21 +89,21 @@ class TeamSpeak:
       return False
 
   def add_bookmark(self, dbpath, nickname, bookmark_name, address, port):
-    library = decky_plugin.DECKY_PLUGIN_DIR + '/bin/ts3-qs4sd.so'
+    library = decky_plugin.DECKY_PLUGIN_DIR + '/bin/discord-qs4sd.so'
     handle = ctypes.cdll.LoadLibrary(library)
 
-    add = handle.TS3BookmarkManager_addBookmark
+    add = handle.DiscordBookmarkManager_addBookmark
     add.restype = ctypes.c_bool
     add.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
 
     return add(dbpath, nickname, bookmark_name, address, port)
 
-class NativeTeamSpeak(TeamSpeak):
+class NativeDiscord(Discord):
   def __init__(self):
     self.process = None
-    self.version = '3.6.2'
-    self.installdir = '/opt/teamspeak3'
-    self.executable = 'ts3client_linux_amd64'
+    self.version = '0.0.71'
+    self.installdir = '/opt/discord'
+    self.executable = 'Discord'
     self.environ = dict(os.environ) | {
       'DISPLAY': ':0',
       'PULSE_SERVER': f'unix:/run/user/{os.getuid()}/pulse/native',
@@ -114,7 +114,7 @@ class NativeTeamSpeak(TeamSpeak):
 
   def configdir(self):
     homedir = decky_plugin.DECKY_USER_HOME
-    return f'{homedir}/.ts3client'
+    return f'{homedir}/.config/discord'
 
   def is_running(self):
     if self.process is None:
@@ -129,7 +129,7 @@ class NativeTeamSpeak(TeamSpeak):
     if self.is_running():
       return
 
-    args = ['-platform', 'xcb']
+    args = []
     executable = f'{self.installdir}/{self.executable}'
 
     try:
@@ -160,7 +160,7 @@ class NativeTeamSpeak(TeamSpeak):
     if self.is_running():
       return False
 
-    url = f'http://files.teamspeak-services.com/releases/client/{self.version}/TeamSpeak3-Client-linux_amd64-{self.version}.run'
+    url = f'https://discord.com/api/download?platform=linux&format=tar.gz'
 
     try:
       wget = urllib.request.urlopen(url)
@@ -169,9 +169,9 @@ class NativeTeamSpeak(TeamSpeak):
       shutil.copyfileobj(wget, file)
 
       os.makedirs(self.installdir, mode=0o700, exist_ok=True)
-      file.seek(0x166E6)
+      file.seek(0)
 
-      tar = tarfile.open(fileobj=file)
+      tar = tarfile.open(fileobj=file, mode='r:gz')
       tar.extractall(path=self.installdir)
 
       file.close()
@@ -179,7 +179,7 @@ class NativeTeamSpeak(TeamSpeak):
     except:
       return False
 
-class FlatpakTeamSpeak(TeamSpeak):
+class FlatpakDiscord(Discord):
   def __init__(self):
     self.environ = dict(os.environ) | {
       'DISPLAY': ':0',
@@ -197,13 +197,13 @@ class FlatpakTeamSpeak(TeamSpeak):
 
   def configdir(self):
     homedir = decky_plugin.DECKY_USER_HOME
-    appsdir = '.var/app/com.teamspeak.TeamSpeak3'
-    return f'{homedir}/{appsdir}/.ts3client'
+    appsdir = '.var/app/com.discordapp.Discord'
+    return f'{homedir}/{appsdir}/config/discord'
 
   def is_running(self):
     try:
       ps = subprocess.check_output(['flatpak', 'ps'], encoding='utf-8', env=self.environ)
-      return 'com.teamspeak.TeamSpeak3' in ps
+      return 'com.discordapp.Discord' in ps
     except:
       return False
 
@@ -212,7 +212,7 @@ class FlatpakTeamSpeak(TeamSpeak):
       return
 
     try:
-      subprocess.Popen(['flatpak', 'run', 'com.teamspeak.TeamSpeak3'], env=self.environ)
+      subprocess.Popen(['flatpak', 'run', 'com.discordapp.Discord'], env=self.environ)
     except:
       pass
 
@@ -221,14 +221,14 @@ class FlatpakTeamSpeak(TeamSpeak):
       return
 
     try:
-      subprocess.run(['flatpak', 'kill', 'com.teamspeak.TeamSpeak3'], env=self.environ)
+      subprocess.run(['flatpak', 'kill', 'com.discordapp.Discord'], env=self.environ)
     except:
       pass
 
   def is_installed(self):
     try:
       ls = subprocess.check_output(['flatpak', 'list'], encoding='utf-8', env=self.environ)
-      return 'com.teamspeak.TeamSpeak3' in ls
+      return 'com.discordapp.Discord' in ls
     except:
       return False
 
@@ -240,7 +240,7 @@ class FlatpakTeamSpeak(TeamSpeak):
       return False
 
     try:
-      subprocess.Run(['flatpak', 'install', 'com.teamspeak.TeamSpeak3', '--noninteractive'], env=self.environ)
+      subprocess.run(['flatpak', 'install', 'com.discordapp.Discord', '--noninteractive'], env=self.environ)
       return True
     except:
       return False

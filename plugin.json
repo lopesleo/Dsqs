@@ -1,10 +1,10 @@
 {
-  "name": "TS3 QuickAccess",
+  "name": "Discord QuickAccess",
   "author": "ILadis",
   "flags": [],
   "publish": {
-    "tags": ["teamspeak"],
-    "description": "A TeamSpeak 3 client plugin that integrates TeamSpeak 3 into Steam Deck's quick access menu.",
+    "tags": ["discord"],
+    "description": "A Discord client plugin that integrates Discord into Steam Deck's quick access menu.",
     "image": "https://raw.githubusercontent.com/ILadis/ts3-qs4sd/master/screenshot1.png"
   }
 }
