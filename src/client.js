@@ -145,13 +145,15 @@ Client.prototype.getSelf = async function() {
     'id': String(user['id']),
     'nickname': String(user['username']),
     'avatar': String(user['avatar']),
+    // Mapping: 'input' = microphone mute, 'output' = speaker deafen (matches TS3 convention)
     'muted': {
-      'input': Boolean(voiceStatus.muted),
-      'output': Boolean(voiceStatus.deafened),
+      'input': Boolean(voiceStatus.muted),   // Microphone muted
+      'output': Boolean(voiceStatus.deafened), // Speakers deafened
     },
+    // PTT configuration - uses Steam Deck shoulder buttons by default
     'ptt': {
-      'state': 'active', // PTT state for Discord
-      'hotkey': 'L4/R4',
+      'state': 'active',
+      'hotkey': 'L4/R4', // Default Steam Deck shoulder button mapping
     }
   };
 };

@@ -51,7 +51,8 @@ class Discord:
     return discord()
 
   def configdir(self):
-    pass
+    """Returns the configuration directory. Override in subclasses."""
+    return None
 
   def is_running(self):
     return True

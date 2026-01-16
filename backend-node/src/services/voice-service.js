@@ -10,6 +10,8 @@ import { getClient } from '../client.js';
 let currentConnection = null;
 let currentGuildId = null;
 let currentChannelId = null;
+let currentMuteState = false;
+let currentDeafState = false;
 
 /**
  * Voice service for handling Discord voice operations
@@ -123,6 +125,44 @@ export const VoiceService = {
   },
 
   /**
+   * Helper function to rejoin voice channel with updated audio state.
+   * Discord.js voice connections require rejoining to change mute/deafen state.
+   * @param {boolean} selfMute - Mute state
+   * @param {boolean} selfDeaf - Deafen state
+   * @returns {Object} Result with success status
+   * @private
+   */
+  _rejoinWithState(selfMute, selfDeaf) {
+    const client = getClient();
+    if (!client || !currentGuildId || !currentChannelId) {
+      return { success: false, reason: 'Invalid connection state' };
+    }
+
+    const guild = client.guilds.cache.get(currentGuildId);
+    if (!guild) {
+      return { success: false, reason: 'Guild not found' };
+    }
+
+    // Destroy and recreate connection with new state
+    // Note: This is the recommended approach for discord.js voice connections
+    // as they don't expose setSelfMute/setSelfDeaf methods directly
+    currentConnection.destroy();
+    currentConnection = joinVoiceChannel({
+      channelId: currentChannelId,
+      guildId: currentGuildId,
+      adapterCreator: guild.voiceAdapterCreator,
+      selfDeaf: selfDeaf,
+      selfMute: selfMute,
+    });
+
+    // Update tracked state
+    currentMuteState = selfMute;
+    currentDeafState = selfDeaf;
+
+    return { success: true };
+  },
+
+  /**
    * Sets the mute state for the bot's voice connection
    * @param {boolean} muted - Whether to mute
    * @returns {Object} Result
@@ -132,30 +172,12 @@ export const VoiceService = {
       return { success: false, reason: 'Not connected to any voice channel' };
     }
 
-    // Note: Self-mute state is managed through the connection options
-    // For a bot, we typically control this at the connection level
     try {
-      // Rejoin with updated mute state
-      const client = getClient();
-      if (!client || !currentGuildId || !currentChannelId) {
-        return { success: false, reason: 'Invalid connection state' };
+      const result = this._rejoinWithState(muted, currentDeafState);
+      if (result.success) {
+        return { success: true, muted };
       }
-
-      const guild = client.guilds.cache.get(currentGuildId);
-      if (!guild) {
-        return { success: false, reason: 'Guild not found' };
-      }
-
-      currentConnection.destroy();
-      currentConnection = joinVoiceChannel({
-        channelId: currentChannelId,
-        guildId: currentGuildId,
-        adapterCreator: guild.voiceAdapterCreator,
-        selfDeaf: false,
-        selfMute: muted,
-      });
-
-      return { success: true, muted };
+      return result;
     } catch (error) {
       return { success: false, reason: error.message };
     }
@@ -172,26 +194,11 @@ export const VoiceService = {
     }
 
     try {
-      const client = getClient();
-      if (!client || !currentGuildId || !currentChannelId) {
-        return { success: false, reason: 'Invalid connection state' };
+      const result = this._rejoinWithState(currentMuteState, deafened);
+      if (result.success) {
+        return { success: true, deafened };
       }
-
-      const guild = client.guilds.cache.get(currentGuildId);
-      if (!guild) {
-        return { success: false, reason: 'Guild not found' };
-      }
-
-      currentConnection.destroy();
-      currentConnection = joinVoiceChannel({
-        channelId: currentChannelId,
-        guildId: currentGuildId,
-        adapterCreator: guild.voiceAdapterCreator,
-        selfDeaf: deafened,
-        selfMute: false,
-      });
-
-      return { success: true, deafened };
+      return result;
     } catch (error) {
       return { success: false, reason: error.message };
     }

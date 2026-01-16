@@ -1,4 +1,5 @@
 import { Events } from 'discord.js';
+import WebSocket from 'ws';
 import { getClient } from '../client.js';
 
 // Store active WebSocket connections
@@ -147,7 +148,7 @@ function setupDiscordEventListeners() {
 function broadcast(data) {
   const message = JSON.stringify(data);
   connections.forEach((ws) => {
-    if (ws.readyState === 1) { // WebSocket.OPEN
+    if (ws.readyState === WebSocket.OPEN) {
       ws.send(message);
     }
   });
