@@ -1,5 +1,5 @@
 export default {
-  input: 'src/index.js',
+  input: 'src/index-new.js',
   context: 'window',
   external: ['react', 'react-dom', 'decky-frontend-lib'],
   output: {
