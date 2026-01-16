@@ -4,33 +4,38 @@
  */
 
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import rateLimit from 'express-rate-limit';
 import { Client, GatewayIntentBits } from 'discord.js';
 import {
   joinVoiceChannel,
-  createAudioPlayer,
   VoiceConnectionStatus,
   entersState,
 } from '@discordjs/voice';
-import crypto from 'crypto';
 
 const app = express();
 const PORT = process.env.PORT || 52260;
 
 app.use(express.json());
 
+// Rate limiting middleware - since this is localhost only, we can be more lenient
+// but still protect against accidental abuse or bugs
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Skip rate limiting for status endpoint
+  skip: (req) => req.path === '/api/status',
+});
+
+// Apply rate limiting to all API routes
+app.use('/api', limiter);
+
 // Global state
 let discordClient = null;
 let voiceConnection = null;
 let currentChannel = null;
 let isAuthenticated = false;
-
-// Token encryption key (should be derived from system info)
-const ENCRYPTION_KEY = crypto.scryptSync(
-  process.env.HOME || 'default-key',
-  'salt',
-  32
-);
 
 /**
  * Initialize Discord client

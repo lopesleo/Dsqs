@@ -40,8 +40,11 @@ export function LoginScreen({ onLogin, error, isLoading }) {
           $('li', {}, 'Open Discord in a browser'),
           $('li', {}, 'Press F12 to open Developer Tools'),
           $('li', {}, 'Go to Console tab'),
-          $('li', {}, 'Type: (webpackChunkdiscord_app.push([[\'\'],{},e=>{m=[];for(let c in e.c)m.push(e.c[c])}]),m).find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken()'),
+          $('li', {}, 'Search online for "how to get Discord token" for the extraction command'),
           $('li', {}, 'Copy the token (without quotes)'),
+        ),
+        $('div', { style: { marginTop: '8px', padding: '8px', backgroundColor: '#faa81a22', borderRadius: '4px', fontSize: '11px', color: '#faa81a' } },
+          '⚠️ Never share your token with anyone. Treat it like a password.'
         )
       )
     ),

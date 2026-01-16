@@ -1,6 +1,13 @@
 /**
  * Token Manager - Handles secure storage and retrieval of Discord token
  * Uses Web Crypto API for browser compatibility
+ * 
+ * Security Notes:
+ * - Uses AES-GCM encryption
+ * - Random salt generated per token
+ * - Key derived from user agent (weak but acceptable for local storage)
+ * - WARNING: This provides obfuscation, not true security
+ * - For true security, would need hardware-backed key storage
  */
 
 const ALGORITHM = 'AES-GCM';
@@ -13,9 +20,9 @@ class TokenManager {
   }
 
   /**
-   * Generate encryption key from passphrase
+   * Generate encryption key from passphrase and salt
    */
-  async deriveKey(passphrase) {
+  async deriveKey(passphrase, salt) {
     const encoder = new TextEncoder();
     const keyMaterial = await window.crypto.subtle.importKey(
       'raw',
@@ -24,8 +31,6 @@ class TokenManager {
       false,
       ['deriveBits', 'deriveKey']
     );
-
-    const salt = encoder.encode('discord-qs-salt-v1'); // Static salt for simplicity
     
     return await window.crypto.subtle.deriveKey(
       {
@@ -42,25 +47,19 @@ class TokenManager {
   }
 
   /**
-   * Initialize encryption key
-   */
-  async initializeKey() {
-    if (this.encryptionKey) return;
-
-    // Use a passphrase based on browser info (for simplicity)
-    // In production, use hardware ID or similar
-    const passphrase = navigator.userAgent + 'discord-qs-key';
-    this.encryptionKey = await this.deriveKey(passphrase);
-  }
-
-  /**
    * Encrypt token and store it
    * @param {string} token - Discord user token
    * @returns {Promise<boolean>} Success status
    */
   async encryptAndStore(token) {
     try {
-      await this.initializeKey();
+      // Generate random salt for this encryption
+      const salt = window.crypto.getRandomValues(new Uint8Array(16));
+      
+      // Use user agent as passphrase (weak but acceptable for obfuscation)
+      // In production, consider prompting for a master password
+      const passphrase = navigator.userAgent + window.location.origin;
+      const key = await this.deriveKey(passphrase, salt);
 
       const encoder = new TextEncoder();
       const data = encoder.encode(token);
@@ -72,11 +71,12 @@ class TokenManager {
           name: ALGORITHM,
           iv: iv
         },
-        this.encryptionKey,
+        key,
         data
       );
 
       const encryptedData = {
+        salt: Array.from(salt),
         iv: Array.from(iv),
         data: Array.from(new Uint8Array(encrypted))
       };
@@ -114,7 +114,10 @@ class TokenManager {
         if (!encryptedData) return null;
       }
 
-      await this.initializeKey();
+      // Retrieve salt and reconstruct key
+      const salt = new Uint8Array(encryptedData.salt);
+      const passphrase = navigator.userAgent + window.location.origin;
+      const key = await this.deriveKey(passphrase, salt);
 
       const iv = new Uint8Array(encryptedData.iv);
       const data = new Uint8Array(encryptedData.data);
@@ -124,7 +127,7 @@ class TokenManager {
           name: ALGORITHM,
           iv: iv
         },
-        this.encryptionKey,
+        key,
         data
       );
 
