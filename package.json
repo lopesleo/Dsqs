@@ -8,9 +8,12 @@
     "build:zip": "rm -rf plugin.zip && cd decky/plugins && zip -r ../../plugin.zip ts3-qs4sd",
     "plugin:reload": "./plugin.reload.mjs",
     "plugin:publish": "./plugin.publish.mjs",
+    "backend:install": "cd backend-node && npm install",
+    "backend:start": "cd backend-node && npm start",
+    "backend:dev": "cd backend-node && npm run dev",
     "docker:build": "docker build -f ./backend/Dockerfile -t discord-qs4sd .",
     "docker:run": "rm -rf ./backend/out && docker run -i -u 1000:1000 -v ./backend:/backend --rm discord-qs4sd",
-    "clean": "rm -rf ./dist ./backend/out ./backend/vnd"
+    "clean": "rm -rf ./dist ./backend/out ./backend/vnd ./backend-node/node_modules"
   },
   "dependencies": {
     "decky-frontend-lib": "3.x",

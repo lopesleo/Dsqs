@@ -1,0 +1,575 @@
+openapi: 3.0.0
+info:
+  title: Discord Quick Access for Steam Deck
+  version: 1.0.0
+  description: |
+    A Discord integration for Steam Deck's quick access menu using the official Discord API.
+servers:
+  - url: http://localhost:52259/api
+
+components:
+  schemas:
+    Guild:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique ID of the Discord guild (server).
+        name:
+          type: string
+          description: Name of the Discord guild.
+        icon:
+          type: string
+          nullable: true
+          description: URL of the guild's icon.
+        memberCount:
+          type: integer
+          description: Total number of members in the guild.
+    
+    VoiceChannel:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique ID of the voice channel.
+        name:
+          type: string
+          description: Name of the voice channel.
+        position:
+          type: integer
+          description: Position of the channel in the guild.
+        parentId:
+          type: string
+          nullable: true
+          description: ID of the parent category, if any.
+        parentName:
+          type: string
+          nullable: true
+          description: Name of the parent category, if any.
+        userLimit:
+          type: integer
+          description: Maximum number of users allowed (0 = unlimited).
+        memberCount:
+          type: integer
+          description: Current number of members in the voice channel.
+    
+    VoiceMember:
+      type: object
+      properties:
+        id:
+          type: string
+          description: User ID of the member.
+        username:
+          type: string
+          description: Username of the member.
+        nickname:
+          type: string
+          description: Server nickname or username if no nickname.
+        avatar:
+          type: string
+          description: URL of the member's avatar.
+        muted:
+          type: boolean
+          description: Whether the member is muted.
+        deafened:
+          type: boolean
+          description: Whether the member is deafened.
+        channelId:
+          type: string
+          description: ID of the voice channel the member is in.
+        channelName:
+          type: string
+          description: Name of the voice channel the member is in.
+    
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: User ID of the bot.
+        username:
+          type: string
+          description: Username of the bot.
+        discriminator:
+          type: string
+          description: Discriminator of the bot.
+        avatar:
+          type: string
+          description: URL of the bot's avatar.
+        tag:
+          type: string
+          description: Full tag (username#discriminator) of the bot.
+    
+    VoiceStatus:
+      type: object
+      properties:
+        connected:
+          type: boolean
+          description: Whether the bot is connected to a voice channel.
+        guildId:
+          type: string
+          nullable: true
+          description: ID of the guild the bot is connected to.
+        channelId:
+          type: string
+          nullable: true
+          description: ID of the voice channel the bot is connected to.
+        channelName:
+          type: string
+          nullable: true
+          description: Name of the voice channel the bot is connected to.
+        status:
+          type: string
+          description: Voice connection status.
+    
+    VoiceConnectRequest:
+      type: object
+      required:
+        - guildId
+        - channelId
+      properties:
+        guildId:
+          type: string
+          description: ID of the guild to connect to.
+        channelId:
+          type: string
+          description: ID of the voice channel to connect to.
+    
+    MuteRequest:
+      type: object
+      required:
+        - muted
+      properties:
+        muted:
+          type: boolean
+          description: Whether to mute.
+    
+    DeafenRequest:
+      type: object
+      required:
+        - deafened
+      properties:
+        deafened:
+          type: boolean
+          description: Whether to deafen.
+    
+    AuthStatus:
+      type: object
+      properties:
+        tokenConfigured:
+          type: boolean
+          description: Whether the Discord token is configured.
+        clientReady:
+          type: boolean
+          description: Whether the Discord client is ready.
+    
+    WebSocketEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - connected
+            - user_connected
+            - user_disconnected
+            - voice_state_update
+            - guild_updated
+            - channel_created
+            - channel_deleted
+            - member_joined
+            - member_left
+          description: Type of the event.
+        timestamp:
+          type: integer
+          description: Unix timestamp of the event.
+        data:
+          type: object
+          description: Event-specific data.
+    
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message.
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Health check
+      description: Returns the health status of the API.
+      responses:
+        200:
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  timestamp:
+                    type: integer
+
+  /guilds:
+    get:
+      tags: [guilds]
+      summary: List guilds
+      description: Returns a list of all Discord guilds (servers) the bot is a member of.
+      responses:
+        200:
+          description: List of guilds
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Guild"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /guilds/{id}:
+    get:
+      tags: [guilds]
+      summary: Get guild
+      description: Returns information about a specific guild.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The ID of the guild.
+          schema:
+            type: string
+      responses:
+        200:
+          description: Guild information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Guild"
+        404:
+          description: Guild not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /guilds/{id}/channels:
+    get:
+      tags: [guilds]
+      summary: List voice channels
+      description: Returns a list of voice channels in a guild.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The ID of the guild.
+          schema:
+            type: string
+      responses:
+        200:
+          description: List of voice channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VoiceChannel"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /guilds/{id}/voice-members:
+    get:
+      tags: [guilds]
+      summary: List voice members
+      description: Returns a list of all members currently in voice channels for a guild.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: The ID of the guild.
+          schema:
+            type: string
+      responses:
+        200:
+          description: List of voice members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VoiceMember"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /guilds/{guildId}/channels/{channelId}/members:
+    get:
+      tags: [guilds]
+      summary: List channel members
+      description: Returns a list of members in a specific voice channel.
+      parameters:
+        - in: path
+          name: guildId
+          required: true
+          description: The ID of the guild.
+          schema:
+            type: string
+        - in: path
+          name: channelId
+          required: true
+          description: The ID of the voice channel.
+          schema:
+            type: string
+      responses:
+        200:
+          description: List of channel members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VoiceMember"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /voice/status:
+    get:
+      tags: [voice]
+      summary: Get voice status
+      description: Returns the current voice connection status.
+      responses:
+        200:
+          description: Voice connection status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceStatus"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /voice/connect:
+    post:
+      tags: [voice]
+      summary: Connect to voice channel
+      description: Connects the bot to a voice channel.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoiceConnectRequest"
+      responses:
+        200:
+          description: Connected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  guildId:
+                    type: string
+                  channelId:
+                    type: string
+                  channelName:
+                    type: string
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /voice/disconnect:
+    post:
+      tags: [voice]
+      summary: Disconnect from voice channel
+      description: Disconnects the bot from the current voice channel.
+      responses:
+        200:
+          description: Disconnected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /voice/mute:
+    post:
+      tags: [voice]
+      summary: Set mute state
+      description: Sets the mute state for the bot's voice connection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MuteRequest"
+      responses:
+        200:
+          description: Mute state updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  muted:
+                    type: boolean
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /voice/deafen:
+    post:
+      tags: [voice]
+      summary: Set deafen state
+      description: Sets the deafen state for the bot's voice connection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeafenRequest"
+      responses:
+        200:
+          description: Deafen state updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  deafened:
+                    type: boolean
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /user:
+    get:
+      tags: [user]
+      summary: Get current user
+      description: Returns information about the current bot user.
+      responses:
+        200:
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        503:
+          description: Discord client not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /user/status:
+    get:
+      tags: [user]
+      summary: Get authentication status
+      description: Returns the authentication status.
+      responses:
+        200:
+          description: Authentication status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStatus"
+        500:
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /ws:
+    get:
+      tags: [websocket]
+      summary: WebSocket connection
+      description: |
+        WebSocket endpoint for real-time Discord events.
+        
+        Connect using WebSocket protocol to receive events such as:
+        - `connected`: Initial connection acknowledgment
+        - `user_connected`: User joined a voice channel
+        - `user_disconnected`: User left a voice channel
+        - `voice_state_update`: User's voice state changed
+        - `guild_updated`: Guild information was updated
+        - `channel_created`: Voice channel was created
+        - `channel_deleted`: Voice channel was deleted
+        - `member_joined`: Member joined the guild
+        - `member_left`: Member left the guild
+      responses:
+        101:
+          description: Switching protocols to WebSocket

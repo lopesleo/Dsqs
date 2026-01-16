@@ -1,6 +1,9 @@
 .vscode/
 backend/vnd
 backend/out
+backend-node/node_modules/
+backend-node/package-lock.json
+backend-node/.env
 decky/data
 decky/logs
 decky/services

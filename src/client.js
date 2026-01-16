@@ -5,7 +5,11 @@ export function Client(endpoint, api) {
   let self = new URL(import.meta.url);
   this.events = new Array();
   this.endpoint = endpoint || (self.origin + '/api');
+  this.wsEndpoint = (endpoint || self.origin).replace('http', 'ws') + '/ws';
   this.api = api;
+  this.currentGuildId = null;
+  this.currentChannelId = null;
+  this.ws = null;
 }
 
 Client.prototype.getStatus = async function() {
@@ -29,24 +33,15 @@ Client.prototype.start = async function() {
   }
 }
 
-Client.prototype.connect = async function(uuid) {
-  let url = this.endpoint + '/server/connect';
-  let body = JSON.stringify({
-    'uuid': String(uuid)
-  });
-
-  let request = new Request(url, {
-    method: 'POST', body
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error(`failed to connect to server ${uuid}`);
-  }
+// Connect to a Discord guild (server)
+Client.prototype.connect = async function(guildId) {
+  this.currentGuildId = guildId;
+  // Return successfully - actual voice connection happens via joinChannel
 };
 
+// Disconnect from voice channel
 Client.prototype.disconnect = async function() {
-  let url = this.endpoint + '/server/disconnect';
+  let url = this.endpoint + '/voice/disconnect';
 
   let request = new Request(url, {
     method: 'POST'
@@ -54,32 +49,48 @@ Client.prototype.disconnect = async function() {
 
   let response = await retry(() => fətch(request.clone()));
   if (!response.ok) {
-    throw new Error('failed to disconnect from server');
+    throw new Error('failed to disconnect from voice channel');
   }
+  
+  this.currentChannelId = null;
 };
 
+// Get current server (guild) status
 Client.prototype.getServer = async function() {
-  let url = this.endpoint + '/server';
+  if (!this.currentGuildId) {
+    return {
+      'name': '',
+      'status': 0,
+    };
+  }
+
+  let url = this.endpoint + '/guilds/' + this.currentGuildId;
 
   let request = new Request(url, {
     method: 'GET'
   });
 
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error('failed to fetch server');
+  try {
+    let response = await retry(() => fətch(request.clone()));
+    if (!response.ok) {
+      return { 'name': '', 'status': 0 };
+    }
+
+    let guild = await response.json();
+
+    return {
+      'name': String(guild['name']),
+      'status': 1, // Connected status
+      'id': String(guild['id']),
+    };
+  } catch (e) {
+    return { 'name': '', 'status': 0 };
   }
-
-  let server = await response.json();
-
-  return {
-    'name': String(server['name']),
-    'status': Number(server['status']),
-  };
 };
 
+// Get available guilds (replaces bookmarks)
 Client.prototype.getBookmarks = async function*() {
-  let url = this.endpoint + '/server';
+  let url = this.endpoint + '/guilds';
 
   let request = new Request(url, {
     method: 'GET'
@@ -87,22 +98,23 @@ Client.prototype.getBookmarks = async function*() {
 
   let response = await retry(() => fətch(request.clone()));
   if (!response.ok) {
-    throw new Error('failed to fetch bookmarks');
+    throw new Error('failed to fetch guilds');
   }
 
-  let server = await response.json();
-  let bookmarks = server['bookmarks'];
+  let guilds = await response.json();
 
-  for (let bookmark of bookmarks) {
+  for (let guild of guilds) {
     yield {
-      'name': String(bookmark['name']),
-      'uuid': String(bookmark['uuid']),
+      'name': String(guild['name']),
+      'uuid': String(guild['id']),
+      'icon': guild['icon'],
     };
   }
 };
 
+// Get current user info
 Client.prototype.getSelf = async function() {
-  let url = this.endpoint + '/self';
+  let url = this.endpoint + '/user';
 
   let request = new Request(url, {
     method: 'GET'
@@ -110,150 +122,103 @@ Client.prototype.getSelf = async function() {
 
   let response = await retry(() => fətch(request.clone()));
   if (!response.ok) {
-    throw new Error('failed to fetch self');
+    throw new Error('failed to fetch user info');
   }
 
-  let client = await response.json();
+  let user = await response.json();
+
+  // Get voice status
+  let voiceUrl = this.endpoint + '/voice/status';
+  let voiceRequest = new Request(voiceUrl, { method: 'GET' });
+  let voiceStatus = { muted: false, deafened: false };
+  
+  try {
+    let voiceResponse = await fətch(voiceRequest);
+    if (voiceResponse.ok) {
+      voiceStatus = await voiceResponse.json();
+    }
+  } catch (e) {
+    // Voice status unavailable
+  }
 
   return {
-    'id': Number(client['client_id']),
-    'nickname': String(client['client_nickname']),
-    'avatar': this.endpoint + '/clients/' + client['client_id'] + '/avatar',
+    'id': String(user['id']),
+    'nickname': String(user['username']),
+    'avatar': String(user['avatar']),
     'muted': {
-      'input': Boolean(client['input_muted']),
-      'output': Boolean(client['output_muted']),
+      'input': Boolean(voiceStatus.muted),
+      'output': Boolean(voiceStatus.deafened),
     },
     'ptt': {
-      'state': String(client['ptt_state']),
-      'hotkey': String(client['ptt_hotkey']),
+      'state': 'active', // PTT state for Discord
+      'hotkey': 'L4/R4',
     }
   };
 };
 
 Client.prototype.rebindPttHotkey = async function() {
-  let url = this.endpoint + '/self/ptt/rebind';
-
-  let request = new Request(url, {
-    method: 'POST'
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error('failed to rebind ptt hotkey');
-  }
+  // PTT hotkey rebinding - placeholder for Steam Deck integration
+  console.log('PTT hotkey rebinding requested');
 };
 
 Client.prototype.clearPttHotkey = async function() {
-  let url = this.endpoint + '/self/ptt/clear';
-
-  let request = new Request(url, {
-    method: 'POST'
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error('failed to clear ptt hotkey');
-  }
+  // PTT hotkey clearing - placeholder for Steam Deck integration
+  console.log('PTT hotkey clearing requested');
 };
 
+// Mute/unmute self
 Client.prototype.muteSelf = async function(id, device, mute) {
-  let url = this.endpoint + '/self/' + (mute ? 'mute' : 'unmute');
+  let url = this.endpoint + '/voice/mute';
   let body = JSON.stringify({
-    'client_id': Number(id),
-    'device': String(device),
+    'muted': Boolean(mute),
   });
 
+  if (device === 'output') {
+    url = this.endpoint + '/voice/deafen';
+    body = JSON.stringify({
+      'deafened': Boolean(mute),
+    });
+  }
+
   let request = new Request(url, {
-    method: 'POST', body
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/json' }
   });
 
   let response = await retry(() => fətch(request.clone()));
   if (!response.ok) {
-    throw new Error(`failed to mute/unmute ${device} device of client ${id}`);
+    throw new Error(`failed to mute/unmute ${device}`);
   }
 };
 
 Client.prototype.getAudioOutputs = async function*() {
-  let url = this.endpoint + '/audio/outputs';
-
-  let request = new Request(url, {
-    method: 'GET'
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error('failed to fetch audio outputs');
-  }
-
-  let outputs = await response.json();
-
-  for (let output of outputs) {
-    yield {
-      'index': Number(output['index']),
-      'name': String(output['name']),
-      'volume': Number(output['volume']) / 100,
-    };
-  }
+  // Audio outputs are managed by the system on Steam Deck
+  // This is a placeholder that returns empty for Discord integration
 };
 
 Client.prototype.setAudioOutputVolume = async function(index, volume) {
-  let url = this.endpoint + '/audio/outputs/volume';
-  let body = JSON.stringify({
-    'index': Number(index),
-    'volume': Number(volume) * 100,
-  });
-
-  let request = new Request(url, {
-    method: 'POST', body
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error('failed to set audio output volume');
-  }
+  // Audio output volume is managed by the system on Steam Deck
+  console.log('Audio output volume control requested:', index, volume);
 };
 
 Client.prototype.getAudioInputs = async function*() {
-  let url = this.endpoint + '/audio/inputs';
-
-  let request = new Request(url, {
-    method: 'GET'
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error('failed to fetch audio input devices');
-  }
-
-  let inputs = await response.json();
-
-  for (let input of inputs) {
-    yield {
-      'index': Number(input['index']),
-      'name': String(input['name']),
-      'current': Boolean(input['current']),
-    };
-  }
+  // Audio inputs are managed by the system on Steam Deck
+  // This is a placeholder that returns empty for Discord integration
 };
 
 Client.prototype.setCurrentAudioInput = async function(index) {
-  let url = this.endpoint + '/audio/inputs/current';
-  let body = JSON.stringify({
-    'index': Number(index),
-  });
-
-  let request = new Request(url, {
-    method: 'POST', body
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error('failed to set current audio input device');
-  }
+  // Audio input selection is managed by the system on Steam Deck
+  console.log('Audio input selection requested:', index);
 };
 
+// List voice channels with members
 Client.prototype.listChannels = async function() {
-  let url = this.endpoint + '/clients';
+  if (!this.currentGuildId) {
+    return [];
+  }
+
+  let url = this.endpoint + '/guilds/' + this.currentGuildId + '/voice-members';
 
   let request = new Request(url, {
     method: 'GET'
@@ -261,33 +226,33 @@ Client.prototype.listChannels = async function() {
 
   let response = await retry(() => fətch(request.clone()));
   if (!response.ok) {
-    throw new Error('failed to fetch clients');
+    throw new Error('failed to fetch voice members');
   }
 
-  let clients = await response.json();
+  let members = await response.json();
   let channels = [];
 
-  for (let client of clients) {
-    let id = Number(client['channel_id']);
-    let channel = channels.find(c => c.id == id);
+  for (let member of members) {
+    let channelId = String(member['channelId']);
+    let channel = channels.find(c => c.id == channelId);
 
     if (!channel) {
       channels.push(channel = {
-        'id': Number(client['channel_id']),
-        'name': String(client['channel_name']),
-        'hasChannels': Number(client['channel_has_sub_channels']),
-        'hasPassword': Boolean(client['channel_has_password']),
+        'id': channelId,
+        'name': String(member['channelName']),
+        'hasChannels': 0,
+        'hasPassword': false,
         'clients': Array(),
       });
     }
 
     channel.clients.push({
-      'id': Number(client['client_id']),
-      'nickname': String(client['client_nickname']),
-      'avatar': this.endpoint + '/clients/' + client['client_id'] + '/avatar',
+      'id': String(member['id']),
+      'nickname': String(member['nickname']),
+      'avatar': String(member['avatar']),
       'muted': {
-        'input': Boolean(client['input_muted']),
-        'output': Boolean(client['output_muted']),
+        'input': Boolean(member['muted']),
+        'output': Boolean(member['deafened']),
       }
     });
   }
@@ -295,40 +260,42 @@ Client.prototype.listChannels = async function() {
   return channels;
 };
 
+// Store cursor position for channel navigation
 Client.prototype.moveCursor = async function(channel) {
-  let url = this.endpoint + '/cursor/move';
-  let body = JSON.stringify({
-    'channel_id': Number(channel.id)
-  });
-
-  let request = new Request(url, {
-    method: 'POST', body
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error(`failed to move cursor to channel ${channel.id}`);
-  }
+  this.currentChannelId = channel.id;
 };
 
+// Join the channel cursor points to
 Client.prototype.joinCursor = async function(password) {
-  let url = this.endpoint + '/cursor/join';
+  if (!this.currentGuildId || !this.currentChannelId) {
+    throw new Error('No guild or channel selected');
+  }
+
+  let url = this.endpoint + '/voice/connect';
   let body = JSON.stringify({
-    'password': String(password || '')
+    'guildId': String(this.currentGuildId),
+    'channelId': String(this.currentChannelId),
   });
 
   let request = new Request(url, {
-    method: 'POST', body
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/json' }
   });
 
   let response = await retry(() => fətch(request.clone()));
   if (!response.ok) {
-    throw new Error('failed to join channel the cursor points to');
+    throw new Error('failed to join voice channel');
   }
 };
 
+// Browse available voice channels
 Client.prototype.browseChannels = async function() {
-  let url = this.endpoint + '/browser';
+  if (!this.currentGuildId) {
+    return [];
+  }
+
+  let url = this.endpoint + '/guilds/' + this.currentGuildId + '/channels';
 
   let request = new Request(url, {
     method: 'GET'
@@ -339,79 +306,73 @@ Client.prototype.browseChannels = async function() {
     throw new Error('failed to browse channels');
   }
 
-  let browser = await response.json();
-  let channels = [];
-
-  for (let channel of browser['sub_channels']) {
-    channels.push({
-      'id': Number(channel['channel_id']),
-      'name': String(channel['channel_name']),
-      'order': Number(channel['channel_order']),
-      'hasChannels': Number(channel['channel_has_sub_channels']),
-      'hasPassword': Boolean(channel['channel_has_password']),
-    });
-  }
-
-  let sorted = [];
-  let nextId = 0;
-
-  while (true) {
-    let channel = channels.find(channel => channel.order === nextId);
-
-    if (!channel) break;
-    else delete channel['order'];
-
-    sorted.push(channel);
-    nextId = channel.id;
-  }
-
-  return sorted;
+  let channels = await response.json();
+  
+  return channels.map((channel, index) => ({
+    'id': String(channel['id']),
+    'name': String(channel['name']),
+    'hasChannels': 0, // Discord voice channels don't have sub-channels
+    'hasPassword': false, // Discord uses permissions, not passwords
+    'memberCount': Number(channel['memberCount'] || 0),
+  }));
 };
 
 Client.prototype.moveBrowser = async function(channel) {
-  let url = this.endpoint + '/browser/move';
-  let body = JSON.stringify({
-    'channel_id': Number(channel.id)
-  });
-
-  let request = new Request(url, {
-    method: 'POST', body
-  });
-
-  let response = await retry(() => fətch(request.clone()));
-  if (!response.ok) {
-    throw new Error(`failed to move browser to channel ${channel.id}`);
-  }
+  // For Discord, this is a no-op as we don't have hierarchical browsing
 };
 
+// Listen to events via WebSocket
 Client.prototype.listenEvents = function() {
-  const url = this.endpoint + '/events';
+  const url = this.wsEndpoint;
 
   var { iterator, take } = generate();
-  var source = connect(), closed = false;
+  var ws = null, closed = false;
+  var self = this;
 
   function connect() {
-    source?.close();
+    if (ws) {
+      ws.close();
+    }
 
     if (!closed) {
-      source = new EventSource(url);
-      source.onmessage = consume;
-      source.onerror = reconnect;
-      return source;
+      ws = new WebSocket(url);
+      self.ws = ws;
+      
+      ws.onmessage = consume;
+      ws.onerror = reconnect;
+      ws.onclose = reconnect;
+      
+      return ws;
     }
   }
 
   function reconnect() {
-    sleep(500).then(connect);
+    if (!closed) {
+      sleep(500).then(connect);
+    }
   }
 
   function shutdown() {
     closed = true;
-    source?.close();
+    if (ws) {
+      ws.close();
+      ws = null;
+      self.ws = null;
+    }
   }
 
   function consume(event) {
     let data = JSON.parse(event.data);
+    
+    // Map Discord events to TS3-compatible event types
+    const eventTypeMap = {
+      'user_connected': 'CLIENT_LIST_CHANGED',
+      'user_disconnected': 'CLIENT_LIST_CHANGED',
+      'voice_state_update': 'CLIENT_LIST_CHANGED',
+      'connected': 'CONNECTION_STATE_CONNECTED',
+    };
+    
+    data.type = eventTypeMap[data.type] || data.type;
     take(data);
   }
 
@@ -422,6 +383,7 @@ Client.prototype.listenEvents = function() {
   };
 
   this.events.push(event);
+  connect();
   return iterator();
 };
 

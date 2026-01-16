@@ -42,9 +42,9 @@ export function TS3SetupHints() {
     $(PanelSection, null,
       $(PanelSectionRow, null,
         $(Field, { label: 'SETUP' }, ''
-          + 'Discord is not installed. Please switch to desktop mode and '
-          + 'download Discord from the Discover store. Make sure to add '
-          + 'all Discord servers you want to connect to as bookmarks. '
+          + 'Discord backend is not running. Please ensure Node.js is installed '
+          + 'and the backend is configured with your Discord bot token. '
+          + 'Start the backend with "npm start" in the backend-node directory. '
           + 'Then come back here.'
         ),
       )

@@ -4,7 +4,6 @@ import tempfile
 import subprocess
 import tarfile
 import urllib
-import ctypes
 
 import decky_plugin
 
@@ -15,14 +14,11 @@ class Plugin:
     plugin.discord = Discord.choose_variant(variant)
 
   async def install(plugin):
-    decky_plugin.logger.debug('Attempting to install Discord')
+    decky_plugin.logger.debug('Attempting to install Discord backend')
     plugin.discord.install()
 
   async def start(plugin):
-    decky_plugin.logger.debug('Attempting to install Discord client plugin')
-    plugin.discord.install_plugin()
-
-    decky_plugin.logger.debug('Attempting to start Discord')
+    decky_plugin.logger.debug('Attempting to start Discord backend')
     plugin.discord.start()
 
   async def status(plugin):
@@ -34,11 +30,11 @@ class Plugin:
     return dict(running = running, installed = installed)
 
   async def stop(plugin):
-    decky_plugin.logger.debug('Attempting to stop Discord')
+    decky_plugin.logger.debug('Attempting to stop Discord backend')
     plugin.discord.stop()
 
   async def _unload(plugin):
-    decky_plugin.logger.debug('Unloading plugin, attempt to stop Discord')
+    decky_plugin.logger.debug('Unloading plugin, attempt to stop Discord backend')
     plugin.discord.stop()
 
 class Discord:
@@ -46,15 +42,15 @@ class Discord:
   def choose_variant(variant):
     variants = dict({
       'develop': Discord,
-      'flatpak': FlatpakDiscord,
+      'node': NodeDiscord,
       'native': NativeDiscord,
     })
 
-    discord = variants.get(variant, FlatpakDiscord)
+    discord = variants.get(variant, NodeDiscord)
 
     return discord()
 
-  def configdir():
+  def configdir(self):
     pass
 
   def is_running(self):
@@ -72,31 +68,94 @@ class Discord:
   def install(self):
     return False
 
-  def install_plugin(self):
-    if not self.is_installed() or self.is_running():
+class NodeDiscord(Discord):
+  def __init__(self):
+    self.process = None
+    self.environ = dict(os.environ) | {
+      'NODE_ENV': 'production',
+    }
+    # Decky Loader uses a utility called `pyinstaller` to bundle their application into
+    # a single executable. When such an application is started a temporary directory is
+    # chosen where all required runtime dependencies are extracted. Then LD_LIBRARY_PATH
+    # is set to point to this directory. Those runtime dependencies might not be compatible
+    # with other programs installed on the system.
+    #
+    # Unsetting LD_LIBRARY_PATH ensures that node is using the system libraries again.
+    self.environ.pop('LD_LIBRARY_PATH', None)
+
+  def backenddir(self):
+    return decky_plugin.DECKY_PLUGIN_DIR + '/backend-node'
+
+  def is_running(self):
+    if self.process is None:
       return False
 
-    source = decky_plugin.DECKY_PLUGIN_DIR + '/bin/discord-qs4sd.so'
-    target = self.configdir() + '/plugins/discord-qs4sd.so'
+    returncode = self.process.poll()
+    running = returncode is None
 
-    if os.path.exists(target):
-      os.chmod(target, 0o755)
+    return running
+
+  def start(self):
+    if self.is_running():
+      return
+
+    backend_dir = self.backenddir()
+    executable = shutil.which('node')
+    
+    if not executable:
+      decky_plugin.logger.error('Node.js is not installed')
+      return
+
+    args = ['node', 'src/index.js']
 
     try:
-      shutil.copy(source, target)
+      self.process = subprocess.Popen(args, executable=executable, env=self.environ, cwd=backend_dir)
+      self.process.poll()
+    except Exception as e:
+      decky_plugin.logger.error(f'Failed to start Node.js backend: {e}')
+
+  def stop(self):
+    if not self.is_running():
+      return
+
+    try:
+      self.process.terminate()
+      self.process.wait(timeout=5)
+    except Exception as e:
+      decky_plugin.logger.error(f'Failed to stop Node.js backend: {e}')
+      try:
+        self.process.kill()
+        self.process.wait(timeout=2)
+      except:
+        pass
+
+  def is_installed(self):
+    backend_dir = self.backenddir()
+    package_json = f'{backend_dir}/package.json'
+    node_modules = f'{backend_dir}/node_modules'
+    installed = os.path.exists(package_json) and os.path.exists(node_modules)
+    return installed
+
+  def install(self):
+    if self.is_installed():
       return True
-    except:
+
+    if self.is_running():
       return False
 
-  def add_bookmark(self, dbpath, nickname, bookmark_name, address, port):
-    library = decky_plugin.DECKY_PLUGIN_DIR + '/bin/discord-qs4sd.so'
-    handle = ctypes.cdll.LoadLibrary(library)
+    backend_dir = self.backenddir()
+    npm = shutil.which('npm')
+    
+    if not npm:
+      decky_plugin.logger.error('npm is not installed')
+      return False
 
-    add = handle.DiscordBookmarkManager_addBookmark
-    add.restype = ctypes.c_bool
-    add.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
-
-    return add(dbpath, nickname, bookmark_name, address, port)
+    try:
+      subprocess.run(['npm', 'install'], cwd=backend_dir, env=self.environ, check=True)
+      return True
+    except Exception as e:
+      decky_plugin.logger.error(f'Failed to install Node.js dependencies: {e}')
+      return False
 
 class NativeDiscord(Discord):
   def __init__(self):
@@ -160,7 +219,7 @@ class NativeDiscord(Discord):
     if self.is_running():
       return False
 
-    url = f'https://discord.com/api/download?platform=linux&format=tar.gz'
+    url = 'https://discord.com/api/download?platform=linux&format=tar.gz'
 
     try:
       wget = urllib.request.urlopen(url)
@@ -175,72 +234,6 @@ class NativeDiscord(Discord):
       tar.extractall(path=self.installdir)
 
       file.close()
-      return True
-    except:
-      return False
-
-class FlatpakDiscord(Discord):
-  def __init__(self):
-    self.environ = dict(os.environ) | {
-      'DISPLAY': ':0',
-      'PULSE_SERVER': f'unix:/run/user/{os.getuid()}/pulse/native',
-      'PULSE_CLIENTCONFIG': f'/run/user/{os.getuid()}/pulse/config',
-    }
-    # Decky Loader uses a utility called `pyinstaller` to bundle their application into
-    # a single executable. When such an application is started a temporary directory is
-    # chosen where all required runtime dependencies are extracted. Then LD_LIBRARY_PATH
-    # is set to point to this directory. Those runtime dependencies might not be compatible
-    # with other programs installed on the system (for example flatpak).
-    #
-    # Unsetting LD_LIBRARY_PATH ensures that flatpak is using the system libraries again.
-    self.environ.pop('LD_LIBRARY_PATH')
-
-  def configdir(self):
-    homedir = decky_plugin.DECKY_USER_HOME
-    appsdir = '.var/app/com.discordapp.Discord'
-    return f'{homedir}/{appsdir}/config/discord'
-
-  def is_running(self):
-    try:
-      ps = subprocess.check_output(['flatpak', 'ps'], encoding='utf-8', env=self.environ)
-      return 'com.discordapp.Discord' in ps
-    except:
-      return False
-
-  def start(self):
-    if self.is_running():
-      return
-
-    try:
-      subprocess.Popen(['flatpak', 'run', 'com.discordapp.Discord'], env=self.environ)
-    except:
-      pass
-
-  def stop(self):
-    if not self.is_running():
-      return
-
-    try:
-      subprocess.run(['flatpak', 'kill', 'com.discordapp.Discord'], env=self.environ)
-    except:
-      pass
-
-  def is_installed(self):
-    try:
-      ls = subprocess.check_output(['flatpak', 'list'], encoding='utf-8', env=self.environ)
-      return 'com.discordapp.Discord' in ls
-    except:
-      return False
-
-  def install(self):
-    if self.is_installed():
-      return True
-
-    if self.is_running():
-      return False
-
-    try:
-      subprocess.run(['flatpak', 'install', 'com.discordapp.Discord', '--noninteractive'], env=self.environ)
       return True
     except:
       return False
