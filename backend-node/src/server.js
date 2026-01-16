@@ -96,8 +96,12 @@ app.post('/api/auth/login', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('[API] Login error:', error);
-    res.status(401).json({ error: 'Login failed', message: error.message });
+    // Sanitize error to prevent token leakage in logs
+    const sanitizedError = error.message ? 
+      error.message.replace(/[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}/g, '[TOKEN]') :
+      'Login failed';
+    console.error('[API] Login error:', sanitizedError);
+    res.status(401).json({ error: 'Login failed', message: 'Invalid token or authentication failed' });
   }
 });
 
@@ -264,6 +268,16 @@ app.get('/api/status', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, '127.0.0.1', () => {
+const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[Server] Discord Quick Access backend running on http://127.0.0.1:${PORT}`);
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`[Server] Port ${PORT} is already in use. Another instance may be running.`);
+    process.exit(1);
+  } else {
+    console.error('[Server] Server error:', error);
+    process.exit(1);
+  }
 });

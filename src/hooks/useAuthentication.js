@@ -77,8 +77,11 @@ export function useAuthentication() {
       setIsLoading(true);
       setError(null);
 
+      // Token minimum length constant
+      const MIN_TOKEN_LENGTH = 50;
+
       // Validate token format (basic check)
-      if (!token || token.length < 50) {
+      if (!token || token.length < MIN_TOKEN_LENGTH) {
         throw new Error('Invalid token format');
       }
 

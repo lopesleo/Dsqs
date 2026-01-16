@@ -5,7 +5,7 @@
 import Assert from 'node:assert';
 import { describe, it } from 'node:test';
 
-describe('New Architecture', async () => {
+describe('New Architecture', () => {
   
   it('should have discordClient service', async () => {
     const { default: DiscordClientService } = await import('../src/services/discordClient.js');

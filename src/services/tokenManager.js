@@ -50,6 +50,13 @@ class TokenManager {
    * Encrypt token and store it
    * @param {string} token - Discord user token
    * @returns {Promise<boolean>} Success status
+   * 
+   * Security Note: The encryption key is derived from user agent and origin,
+   * which provides obfuscation but not true security. For production use,
+   * consider:
+   * - Prompting user for a master password
+   * - Using hardware-backed key storage (WebAuthn, TPM)
+   * - Implementing platform-specific secure storage
    */
   async encryptAndStore(token) {
     try {
