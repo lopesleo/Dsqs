@@ -42,9 +42,9 @@ export function TS3SetupHints() {
     $(PanelSection, null,
       $(PanelSectionRow, null,
         $(Field, { label: 'SETUP' }, ''
-          + 'TeamSpeak 3 is not installed. Please switch to desktop mode and '
-          + 'download TeamSpeak 3 from the Discover store. Make sure to add '
-          + 'all TeamSpeak servers you want to connect to as bookmarks. '
+          + 'Discord is not installed. Please switch to desktop mode and '
+          + 'download Discord from the Discover store. Make sure to add '
+          + 'all Discord servers you want to connect to as bookmarks. '
           + 'Then come back here.'
         ),
       )
@@ -313,7 +313,7 @@ export function TS3VolumeSettings(props) {
     ),
     $(PanelSectionRow, null,
       $(Field, { label: 'Microphone', bottomSeparator: 'none', description: ''
-        + 'Select the active input device for TeamSpeak.'
+        + 'Select the active input device for Discord.'
       })
     ),
     $(PanelSectionRow, null,
@@ -397,10 +397,10 @@ export function TS3IconButton({ icon, onClick }) {
   return $(DialogButton, { className: 'icon-button', onClick }, icon);
 }
 
-export function TS3LogoIcon() {
-  const path = Icons.TS3Logo;
+export function DiscordLogoIcon() {
+  const path = Icons.DiscordLogo;
   return (
-    $('svg', { viewBox: '0 0 460 460', width: '20px' },
+    $('svg', { viewBox: '0 0 640 360', width: '20px' },
       $('path', { fill: 'currentColor', 'd': path })
     )
   );

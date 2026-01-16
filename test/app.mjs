@@ -30,11 +30,11 @@ describe('App', async () => {
 
   const nonMutedSelf = { id: 3, muted: { input: false, output: false } };
 
-  const connectedServer = { status: 1, name: 'My TeamSpeak Server' };
+  const connectedServer = { status: 1, name: 'My Discord Server' };
   const disconnectedServer = { status: 0 };
 
-  const bookmark1 = { name: 'My TeamSpeak Server', uuid: 'b5a77db9-a1e5-46d9-b297-3d555812c697' };
-  const bookmark2 = { name: 'Another TeamSpeak Server', uuid: '2bdd7fea-1358-4f71-8064-96243916381b' };
+  const bookmark1 = { name: 'My Discord Server', uuid: 'b5a77db9-a1e5-46d9-b297-3d555812c697' };
+  const bookmark2 = { name: 'Another Discord Server', uuid: '2bdd7fea-1358-4f71-8064-96243916381b' };
 
   it('should display available bookmarks if not connected to any server', async () => {
     const { App } = await import('../src/app.js');
