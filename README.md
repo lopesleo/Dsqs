@@ -1,18 +1,37 @@
 A Discord client and [DeckyLoader](https://github.com/SteamDeckHomebrew/PluginLoader) plugin that integrates Discord into Steam Deck's quick access menu.
 
+> **⚠️ NEW ARCHITECTURE**: This plugin has been redesigned to use discord.js for a full-featured Discord client experience. See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+
 <img src="screenshot1.png" width="50%">
 <img src="screenshot2.png" width="50%">
 
 ## Features
 
-- Connect to Discord servers.
-- See connected clients and join their channels.
-- Browse and join available channels on the server.
-- See client avatars and their current status.
-- Mute/Unmute microphone and speakers.
-- Control audio volumes of running applications.
-- Push-to-Talk via shoulder buttons (L/R 4-5).
-- Disconnect from current server.
+- **Token-based Authentication** - Login with your Discord user token
+- **Server Management** - Browse and connect to your Discord servers
+- **Voice Channels** - See and join voice channels
+- **Voice Controls** - Mute/unmute microphone and deafen/undeafen speakers
+- **Real-time Status** - See connected users and channel status
+- **Secure Storage** - Token encrypted using Web Crypto API
+- **Quick Access** - All features accessible from Steam Deck quick access menu
+
+## ⚠️ Important Warning
+
+**Using Discord user tokens violates Discord Terms of Service.** This plugin is provided for educational and personal use only. Your Discord account may be suspended or banned for using it. Use at your own risk.
+
+## Architecture
+
+This plugin uses a modern architecture with:
+- **React Frontend** - UI in Decky Loader
+- **Node.js Backend** - Express server running discord.js
+- **Python Manager** - Manages backend lifecycle
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation.
+
+## Prerequisites
+
+- Steam Deck with [DeckyLoader](https://github.com/SteamDeckHomebrew/decky-loader) installed
+- Node.js and npm (installed automatically on SteamOS)
 
 ## Building
 

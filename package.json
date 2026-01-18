@@ -1,6 +1,7 @@
 {
   "name": "discord-qs4sd",
   "version": "1.2.0",
+  "type": "module",
   "description": "A Discord client plugin that integrates Discord into Steam Deck's quick access menu.",
   "scripts": {
     "test": "node --test --experimental-test-module-mocks",
@@ -13,7 +14,11 @@
     "clean": "rm -rf ./dist ./backend/out ./backend/vnd"
   },
   "dependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/voice": "^0.19.0",
     "decky-frontend-lib": "3.x",
+    "discord.js": "^14.25.1",
+    "libsodium-wrappers": "^0.8.0",
     "react": "16.x"
   },
   "devDependencies": {

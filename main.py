@@ -5,6 +5,7 @@ import subprocess
 import tarfile
 import urllib
 import ctypes
+import time
 
 import decky_plugin
 
@@ -13,6 +14,7 @@ class Plugin:
   async def _main(plugin):
     variant = os.environ.get('PLUGIN_VARIANT')
     plugin.discord = Discord.choose_variant(variant)
+    plugin.backend = NodeBackend()
 
   async def install(plugin):
     decky_plugin.logger.debug('Attempting to install Discord')
@@ -24,22 +26,118 @@ class Plugin:
 
     decky_plugin.logger.debug('Attempting to start Discord')
     plugin.discord.start()
+    
+    # Start Node.js backend for discord.js client
+    decky_plugin.logger.debug('Attempting to start Node.js backend')
+    plugin.backend.start()
 
   async def status(plugin):
     installed = plugin.discord.is_installed()
     running = plugin.discord.is_running()
+    backend_running = plugin.backend.is_running()
 
-    decky_plugin.logger.debug(f'Querying Discord status: installed={installed}, running={running}')
+    decky_plugin.logger.debug(f'Querying Discord status: installed={installed}, running={running}, backend={backend_running}')
 
-    return dict(running = running, installed = installed)
+    return dict(running = running, installed = installed, backend_running = backend_running)
 
   async def stop(plugin):
     decky_plugin.logger.debug('Attempting to stop Discord')
     plugin.discord.stop()
+    
+    decky_plugin.logger.debug('Attempting to stop Node.js backend')
+    plugin.backend.stop()
 
   async def _unload(plugin):
-    decky_plugin.logger.debug('Unloading plugin, attempt to stop Discord')
+    decky_plugin.logger.debug('Unloading plugin, attempt to stop Discord and backend')
     plugin.discord.stop()
+    plugin.backend.stop()
+
+class NodeBackend:
+  """Manages the Node.js backend process that runs discord.js"""
+  
+  def __init__(self):
+    self.process = None
+    self.backend_dir = os.path.join(decky_plugin.DECKY_PLUGIN_DIR, 'backend-node')
+    self.log_file = None
+
+  def is_running(self):
+    if self.process is None:
+      return False
+    
+    returncode = self.process.poll()
+    return returncode is None
+
+  def start(self):
+    if self.is_running():
+      decky_plugin.logger.info('Node.js backend already running')
+      return
+    
+    # Check if Node.js is available
+    try:
+      subprocess.run(['node', '--version'], capture_output=True, check=True)
+    except:
+      decky_plugin.logger.error('Node.js not found. Cannot start backend.')
+      return
+    
+    # Install dependencies if needed
+    node_modules = os.path.join(self.backend_dir, 'node_modules')
+    if not os.path.exists(node_modules):
+      decky_plugin.logger.info('Installing Node.js backend dependencies...')
+      try:
+        subprocess.run(['npm', 'install'], cwd=self.backend_dir, check=True, timeout=120)
+      except Exception as e:
+        decky_plugin.logger.error(f'Failed to install backend dependencies: {e}')
+        return
+    
+    # Start the backend server
+    try:
+      server_script = os.path.join(self.backend_dir, 'src', 'server.js')
+      
+      # Open log file
+      log_path = os.path.join(decky_plugin.DECKY_PLUGIN_LOG_DIR, 'discord-backend.log')
+      self.log_file = open(log_path, 'w')
+      
+      env = os.environ.copy()
+      env['PORT'] = '52260'
+      
+      self.process = subprocess.Popen(
+        ['node', server_script],
+        cwd=self.backend_dir,
+        env=env,
+        stdout=self.log_file,
+        stderr=subprocess.STDOUT,
+      )
+      
+      # Wait a bit for server to start
+      time.sleep(2)
+      
+      if self.is_running():
+        decky_plugin.logger.info(f'Node.js backend started with PID {self.process.pid}')
+      else:
+        decky_plugin.logger.error('Node.js backend failed to start')
+        
+    except Exception as e:
+      decky_plugin.logger.error(f'Failed to start Node.js backend: {e}')
+
+  def stop(self):
+    if not self.is_running():
+      return
+    
+    try:
+      self.process.terminate()
+      self.process.wait(timeout=5)
+      decky_plugin.logger.info('Node.js backend stopped')
+    except subprocess.TimeoutExpired:
+      self.process.kill()
+      self.process.wait()
+      decky_plugin.logger.warning('Node.js backend killed (did not terminate gracefully)')
+    except Exception as e:
+      decky_plugin.logger.error(f'Error stopping Node.js backend: {e}')
+    finally:
+      self.process = None
+      if self.log_file:
+        self.log_file.close()
+        self.log_file = None
 
 class Discord:
   @staticmethod
